@@ -5,8 +5,8 @@
 # Supports both local installation and curl | sh
 #
 # Usage with curl:
-#   curl -fsSL https://raw.githubusercontent.com/trieloff/ai-aligned-git/main/install.sh | sh
-#   UPGRADE=true curl -fsSL https://raw.githubusercontent.com/trieloff/ai-aligned-git/main/install.sh | sh
+#   curl -fsSL https://raw.githubusercontent.com/ai-ecoverse/ai-aligned-git/main/install.sh | sh
+#   UPGRADE=true curl -fsSL https://raw.githubusercontent.com/ai-ecoverse/ai-aligned-git/main/install.sh | sh
 
 set -e
 
@@ -22,8 +22,8 @@ NC='\033[0m' # No Color
 INSTALL_DIR="$HOME/.local/bin"
 SCRIPT_NAME="git"
 SOURCE_SCRIPT="executable_git"
-# REPO_URL="https://github.com/trieloff/ai-aligned-git"  # Currently unused
-RAW_BASE_URL="https://raw.githubusercontent.com/trieloff/ai-aligned-git/main"
+# REPO_URL="https://github.com/ai-ecoverse/ai-aligned-git"  # Currently unused
+RAW_BASE_URL="https://raw.githubusercontent.com/ai-ecoverse/ai-aligned-git/main"
 
 # Verbose mode flag
 VERBOSE=${VERBOSE:-false}

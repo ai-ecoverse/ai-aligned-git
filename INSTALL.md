@@ -16,12 +16,12 @@ This guide provides detailed instructions for installing AI-Aligned-Git on your 
 The easiest way to install AI-Aligned-Git is using our automated installer:
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/trieloff/ai-aligned-git/main/install.sh | sh
+curl -fsSL https://raw.githubusercontent.com/ai-ecoverse/ai-aligned-git/main/install.sh | sh
 ```
 
 Or with wget:
 ```bash
-wget -qO- https://raw.githubusercontent.com/trieloff/ai-aligned-git/main/install.sh | sh
+wget -qO- https://raw.githubusercontent.com/ai-ecoverse/ai-aligned-git/main/install.sh | sh
 ```
 
 The installer will:
@@ -46,14 +46,14 @@ The installer will:
 The automated installer handles all configuration for you:
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/trieloff/ai-aligned-git/main/install.sh | sh
+curl -fsSL https://raw.githubusercontent.com/ai-ecoverse/ai-aligned-git/main/install.sh | sh
 ```
 
 ### Method 2: Clone and Install
 
 ```bash
 # Clone the repository
-git clone https://github.com/trieloff/ai-aligned-git.git
+git clone https://github.com/ai-ecoverse/ai-aligned-git.git
 cd ai-aligned-git
 
 # Run the installer
@@ -66,7 +66,7 @@ If you prefer to install manually:
 
 ```bash
 # Clone the repository
-git clone https://github.com/trieloff/ai-aligned-git.git
+git clone https://github.com/ai-ecoverse/ai-aligned-git.git
 
 # Create ~/.local/bin directory
 mkdir -p ~/.local/bin
@@ -255,7 +255,7 @@ Note: PATH modifications in your shell configuration files are not automatically
 
 If you encounter issues not covered here:
 
-1. Check the [GitHub Issues](https://github.com/trieloff/ai-aligned-git/issues)
+1. Check the [GitHub Issues](https://github.com/ai-ecoverse/ai-aligned-git/issues)
 2. Run the installer with verbose output: `./install.sh --verbose` or `./install.sh -v`
 3. Verify your shell and OS are supported
 

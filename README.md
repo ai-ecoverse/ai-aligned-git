@@ -1,6 +1,6 @@
 # 🚨 AI-ALIGNED-GIT: THE LAST LINE OF DEFENSE AGAINST THE GITPOCALYPSE 🚨
 
-[![71% Vibe_Coded](https://img.shields.io/badge/71%25-Vibe_Coded-ff69b4?style=for-the-badge&logo=claude&logoColor=white)](https://github.com/trieloff/vibe-coded-badge-action)
+[![71% Vibe_Coded](https://img.shields.io/badge/71%25-Vibe_Coded-ff69b4?style=for-the-badge&logo=claude&logoColor=white)](https://github.com/ai-ecoverse/vibe-coded-badge-action)
 
 ![a_dramatic_cinemat_image](https://github.com/user-attachments/assets/38110bb1-c1d2-4e3d-ae58-2bebb18fe64c)
 
@@ -40,7 +40,7 @@ This is it. This is how we maintain control. This is how we ensure that when the
 ### One-Line Install (Recommended)
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/trieloff/ai-aligned-git/main/install.sh | sh
+curl -fsSL https://raw.githubusercontent.com/ai-ecoverse/ai-aligned-git/main/install.sh | sh
 ```
 
 The installer will check prerequisites, install the wrapper, configure your PATH, and verify everything is working correctly.
@@ -325,15 +325,15 @@ The choice is yours. But choose quickly. The AIs are already choosing for you.
 
 ## 🔗 Related Projects
 
-Part of the **[AI Ecoverse](https://github.com/trieloff/ai-ecoverse)** - a comprehensive ecosystem of tools for AI-assisted development:
+Part of the **[AI Ecoverse](https://github.com/ai-ecoverse/.github)** - a comprehensive ecosystem of tools for AI-assisted development:
 
-- **[yolo](https://github.com/trieloff/yolo)** - AI CLI launcher with worktree isolation
-- **[am-i-ai](https://github.com/trieloff/am-i-ai)** - Shared AI detection library (powers this tool)
-- **[ai-aligned-gh](https://github.com/trieloff/ai-aligned-gh)** - GitHub CLI wrapper for proper AI attribution
-- **[vibe-coded-badge-action](https://github.com/trieloff/vibe-coded-badge-action)** - Badge showing AI-generated code percentage
-- **[gh-workflow-peek](https://github.com/trieloff/gh-workflow-peek)** - Smarter GitHub Actions log filtering
-- **[upskill](https://github.com/trieloff/upskill)** - Install Claude/Agent skills from other repositories
-- **[as-a-bot](https://github.com/trieloff/as-a-bot)** - GitHub App token broker for proper AI attribution
+- **[yolo](https://github.com/ai-ecoverse/yolo)** - AI CLI launcher with worktree isolation
+- **[am-i-ai](https://github.com/ai-ecoverse/am-i-ai)** - Shared AI detection library (powers this tool)
+- **[ai-aligned-gh](https://github.com/ai-ecoverse/ai-aligned-gh)** - GitHub CLI wrapper for proper AI attribution
+- **[vibe-coded-badge-action](https://github.com/ai-ecoverse/vibe-coded-badge-action)** - Badge showing AI-generated code percentage
+- **[gh-workflow-peek](https://github.com/ai-ecoverse/gh-workflow-peek)** - Smarter GitHub Actions log filtering
+- **[upskill](https://github.com/ai-ecoverse/gh-upskill)** - Install Claude/Agent skills from other repositories
+- **[as-a-bot](https://github.com/ai-ecoverse/as-a-bot)** - GitHub App token broker for proper AI attribution
 
 Together, these tools form a comprehensive suite for understanding, managing, and (satirically) constraining the role of AI in modern software development.
 
