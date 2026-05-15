@@ -313,7 +313,7 @@ Currently protecting humanity from:
 - [Claude Code](https://www.anthropic.com/claude-code) (Anthropic)
 - [Crush](https://charm.sh/tools/crush/) (Charm)
 - [Goose](https://github.com/block/goose) (Block)
-- [Grok Build](https://x.ai/) (xAI)
+- [Grok Build](https://x.ai/cli) (xAI)
 - [Droid](https://factory.ai) (Factory AI)
 - [Cursor](https://cursor.com/)
 - [GitHub Copilot](https://github.com/features/copilot)
