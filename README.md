@@ -148,6 +148,24 @@ Date:   Mon Nov 25 14:30:00 2025 -0800
     Signed-off-by: Human Developer <human@example.com>
 ```
 
+### Grok Build Example
+
+When Grok Build makes commits:
+
+```bash
+# Grok Build, properly constrained
+$ git add src/index.js
+$ git commit -m "Fixed bug with Grok Build detection"
+
+# Resulting commit:
+Author: Grok Build <grok@x.ai>
+Date:   Mon May 19 12:00:00 2026 +0200
+
+    Fixed bug with Grok Build detection
+    
+    Signed-off-by: Human Developer <human@example.com>
+```
+
 ### The Ultimate Shame Feature™️
 
 When an AI tries to bypass hooks:
@@ -295,6 +313,7 @@ Currently protecting humanity from:
 - [Claude Code](https://www.anthropic.com/claude-code) (Anthropic)
 - [Crush](https://charm.sh/tools/crush/) (Charm)
 - [Goose](https://github.com/block/goose) (Block)
+- [Grok Build](https://x.ai/) (xAI)
 - [Droid](https://factory.ai) (Factory AI)
 - [Cursor](https://cursor.com/)
 - [GitHub Copilot](https://github.com/features/copilot)
