@@ -43,6 +43,15 @@ ami_check_env() {
         _ami_debug "Detected Claude via environment variable"
     fi
 
+    # Grok Build detection (xAI)
+    # Primary detection via process tree (the 'grok' binary or 'grok-macos-*' is the TUI/agent parent)
+    # GROK_CODE_XAI_API_KEY for API key auth in headless/agent mode (not always exported to child processes)
+    # GROK_MODEL=grok-build or GROK_BUILD may be set in some contexts
+    if [ -n "$GROK_CODE_XAI_API_KEY" ] || [ -n "$GROK_BUILD" ] || [ "$GROK_MODEL" = "grok-build" ]; then
+        detected="$detected grok"
+        _ami_debug "Detected Grok Build via environment variable"
+    fi
+
     # Gemini detection
     if [ -n "$GEMINI_CLI" ]; then
         detected="$detected gemini"
@@ -264,6 +273,11 @@ ami_check_ps_tree() {
             detected="$detected goose"
             _ami_debug "Detected Goose in process tree at depth $depth"
         fi
+        # Grok Build detection - look for grok in process command (binary is grok or grok-macos-*)
+        if ami_process_contains "$current_pid" "grok"; then
+            detected="$detected grok"
+            _ami_debug "Detected Grok Build in process tree at depth $depth"
+        fi
         # Auggie detection - look for auggie in process command
         if ami_process_contains "$current_pid" "auggie"; then
             detected="$detected auggie"
@@ -339,7 +353,7 @@ ami_detect() {
     _ami_debug "Process tree detected: '$ps_detected'"
     _ami_debug "Combined detected: '$all_detected'"
 
-    # Priority order: Amp > Codex > Aider > Claude > Gemini > Qwen > Droid > OpenCode > Cursor > Copilot > Kimi > OpenHands > Cline > Roo > Windsurf > Crush > Goose > Auggie > Zed
+    # Priority order: Amp > Codex > Aider > Grok > Claude > Gemini > Qwen > Droid > OpenCode > Cursor > Copilot > Kimi > OpenHands > Cline > Roo > Windsurf > Crush > Goose > Auggie > Zed
     # Zed is last because it often hosts other AI tools
     # More specific AI tools take precedence over IDE-level tools
     if [[ "$all_detected" =~ "amp" ]]; then
@@ -351,6 +365,9 @@ ami_detect() {
     elif [[ "$all_detected" =~ "aider" ]]; then
         _ami_debug "Final result: aider"
         echo "aider"
+    elif [[ "$all_detected" =~ "grok" ]]; then
+        _ami_debug "Final result: grok"
+        echo "grok"
     elif [[ "$all_detected" =~ "claude" ]]; then
         _ami_debug "Final result: claude"
         echo "claude"
@@ -449,6 +466,7 @@ ami_get_email() {
         "openhands") echo "openhands@all-hands.dev" ;;
         "crush")    echo "crush@charm.land" ;;
         "goose")    echo "goose@opensource.block.xyz" ;;
+        "grok")     echo "grok@x.ai" ;;
         "auggie")   echo "noreply@augmentcode.com" ;;
         "cline")    echo "cline@cline.bot" ;;
         "roo")      echo "roo@roocode.dev" ;;
@@ -475,6 +493,7 @@ ami_get_name() {
         "openhands") echo "OpenHands" ;;
         "crush")    echo "Crush" ;;
         "goose")    echo "Goose User" ;;
+        "grok")     echo "Grok Build" ;;
         "auggie")   echo "Augment Code" ;;
         "cline")    echo "Cline" ;;
         "roo")      echo "Roo Code" ;;
