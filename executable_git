@@ -5,7 +5,7 @@
 # See: https://github.com/ai-ecoverse/am-i-ai
 
 # --- BEGIN BUNDLED am-i-ai ---
-# Bundled from am-i-ai v1.3.0
+# Bundled from am-i-ai v1.4.0
 # https://github.com/ai-ecoverse/am-i-ai
 #
 # This code is auto-generated. Do not edit manually.
@@ -84,9 +84,11 @@ ami_check_env() {
         _ami_debug "Detected OpenCode via environment variable"
     fi
 
-    # Codex CLI detection
-    # Detect via CODEX_CLI env var or CODEX_SANDBOX (set in sandboxed ACP sessions)
-    if [ -n "$CODEX_CLI" ] || [ -n "$CODEX_SANDBOX" ]; then
+    # Codex detection
+    # CLI sets CODEX_CLI, sandboxed ACP sessions set CODEX_SANDBOX,
+    # and Codex Desktop shells expose CODEX_SHELL/CODEX_THREAD_ID.
+    if [ -n "$CODEX_CLI" ] || [ -n "$CODEX_SANDBOX" ] || \
+       [ -n "$CODEX_SHELL" ] || [ -n "$CODEX_THREAD_ID" ]; then
         detected="$detected codex"
         _ami_debug "Detected Codex via environment variable"
     fi
@@ -224,7 +226,7 @@ ami_check_ps_tree() {
             detected="$detected gemini"
             _ami_debug "Detected Gemini in process tree at depth $depth"
         fi
-        # Detect Codex CLI by process name
+        # Detect Codex CLI/Desktop by process name
         if ami_process_contains "$current_pid" "codex"; then
             detected="$detected codex"
             _ami_debug "Detected Codex in process tree at depth $depth"
@@ -507,7 +509,7 @@ ami_get_name() {
     case "$tool" in
         "claude")   echo "Claude Code" ;;
         "gemini")   echo "Gemini" ;;
-        "codex")    echo "Codex CLI" ;;
+        "codex")    echo "Codex" ;;
         "aider")    echo "Aider" ;;
         "qwen")     echo "Qwen Code" ;;
         "cursor")   echo "Cursor AI" ;;
