@@ -5,7 +5,7 @@
 # See: https://github.com/ai-ecoverse/am-i-ai
 
 # --- BEGIN BUNDLED am-i-ai ---
-# Bundled from am-i-ai v1.4.0
+# Bundled from am-i-ai v1.5.0
 # https://github.com/ai-ecoverse/am-i-ai
 #
 # This code is auto-generated. Do not edit manually.
@@ -168,7 +168,8 @@ ami_check_env() {
     fi
 
     # Auggie detection (Augment Code)
-    if [ -n "$AUGMENT_API_TOKEN" ]; then
+    # Intent by Augment / ACP mode sets AUGMENT_AGENT=1 without AUGMENT_API_TOKEN.
+    if [ -n "$AUGMENT_API_TOKEN" ] || [ -n "$AUGMENT_AGENT" ]; then
         detected="$detected auggie"
         _ami_debug "Detected Auggie via environment variable"
     fi
