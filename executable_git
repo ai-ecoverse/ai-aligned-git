@@ -168,7 +168,8 @@ ami_check_env() {
     fi
 
     # Auggie detection (Augment Code)
-    if [ -n "$AUGMENT_API_TOKEN" ]; then
+    # Intent by Augment / ACP mode sets AUGMENT_AGENT=1 without AUGMENT_API_TOKEN.
+    if [ -n "$AUGMENT_API_TOKEN" ] || [ -n "$AUGMENT_AGENT" ]; then
         detected="$detected auggie"
         _ami_debug "Detected Auggie via environment variable"
     fi
