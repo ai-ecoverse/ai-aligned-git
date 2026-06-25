@@ -94,7 +94,7 @@ ami_check_env() {
     fi
 
     # Aider detection
-    if [ "$OR_APP_NAME" = "Aider" ]; then
+    if [ "$OR_APP_NAME" = "Aider" ] || [ -n "$AIDER_CLI" ]; then
         detected="$detected aider"
         _ami_debug "Detected Aider via environment variable"
     fi
@@ -187,7 +187,7 @@ ami_check_env() {
     fi
 
     # Windsurf/Cascade detection
-    if [ -n "$WINDSURF_SESSION" ] || [ "$TERM_PROGRAM" = "windsurf" ]; then
+    if [ -n "$WINDSURF_SESSION" ] || [ -n "$WINDSURF_AI" ] || [ "$TERM_PROGRAM" = "windsurf" ]; then
         detected="$detected windsurf"
         _ami_debug "Detected Windsurf via environment variable"
     fi
