@@ -575,14 +575,166 @@ find_real_git() {
 # Main script
 GIT_BIN=$(find_real_git)
 
+is_blocked_config_key() {
+    local key
+    key=$(printf '%s' "${1%%=*}" | tr '[:upper:]' '[:lower:]')
+    case "$key" in
+        core.hookspath|alias.*|include.*|includeif.*) return 0 ;;
+    esac
+    return 1
+}
+
+refuse_if_ai() {
+    local tool
+    tool=$(detect_ai_tool)
+    if [ "$tool" != "none" ]; then
+        echo "Error: $1 is not allowed when running under AI control ($tool)." >&2
+        shift
+        for detail in "$@"; do
+            echo "  $detail" >&2
+        done
+        echo "Use the real git subcommand directly and let the hooks run." >&2
+        exit 1
+    fi
+}
+
+orig_args=("$@")
+global_args=()
+repo_args=()
+config_args=()
+blocked_config=()
+unknown_option=""
+while [ $# -gt 0 ]; do
+    case "$1" in
+        -C|--git-dir|--work-tree)
+            [ $# -ge 2 ] || exec "$GIT_BIN" "${orig_args[@]}"
+            global_args+=("$1" "$2")
+            repo_args+=("$1" "$2")
+            config_args+=("$1" "$2")
+            shift 2
+            ;;
+        -c|--config-env)
+            [ $# -ge 2 ] || exec "$GIT_BIN" "${orig_args[@]}"
+            if is_blocked_config_key "$2"; then
+                blocked_config+=("$1 $2")
+            fi
+            global_args+=("$1" "$2")
+            config_args+=("$1" "$2")
+            shift 2
+            ;;
+        --config-env=*)
+            if is_blocked_config_key "${1#--config-env=}"; then
+                blocked_config+=("$1")
+            fi
+            global_args+=("$1")
+            config_args+=("$1")
+            shift
+            ;;
+        --namespace|--attr-source|--super-prefix|--shallow-file)
+            [ $# -ge 2 ] || exec "$GIT_BIN" "${orig_args[@]}"
+            global_args+=("$1" "$2")
+            shift 2
+            ;;
+        --git-dir=*|--work-tree=*|--bare)
+            global_args+=("$1")
+            repo_args+=("$1")
+            config_args+=("$1")
+            shift
+            ;;
+        --namespace=*|--attr-source=*|--super-prefix=*|--list-cmds=*|--exec-path|--exec-path=*|\
+        --no-pager|-p|-P|--paginate|--literal-pathspecs|--no-literal-pathspecs|--glob-pathspecs|\
+        --noglob-pathspecs|--icase-pathspecs|--no-replace-objects|--no-optional-locks|--no-lazy-fetch|--no-advice)
+            global_args+=("$1")
+            shift
+            ;;
+        --version|-v|--help|-h|--html-path|--man-path|--info-path)
+            break
+            ;;
+        -*)
+            unknown_option="$1"
+            break
+            ;;
+        *)
+            break
+            ;;
+    esac
+done
+
+if [ -n "$unknown_option" ]; then
+    refuse_if_ai "the unrecognised global option '$unknown_option' before the subcommand"
+fi
+
+for config_key_var in $(compgen -v GIT_CONFIG_KEY_); do
+    if is_blocked_config_key "${!config_key_var}"; then
+        blocked_config+=("$config_key_var=${!config_key_var}")
+    fi
+done
+config_parameters_lower=$(printf '%s' "$GIT_CONFIG_PARAMETERS" | tr '[:upper:]' '[:lower:]')
+case "$config_parameters_lower" in
+    *core.hookspath*|*alias.*|*include.*|*includeif.*)
+        blocked_config+=("GIT_CONFIG_PARAMETERS")
+        ;;
+esac
+
+if [ ${#blocked_config[@]} -gt 0 ]; then
+    refuse_if_ai "overriding core.hooksPath, alias.* or include.* from the command line or environment" "${blocked_config[@]}"
+fi
+
+if [ -n "${GIT_CONFIG_GLOBAL+x}${GIT_CONFIG_SYSTEM+x}${GIT_CONFIG+x}${GIT_CONFIG_NOSYSTEM+x}" ]; then
+    effective_hooks=$("$GIT_BIN" "${repo_args[@]}" config --get-all core.hooksPath 2>/dev/null; echo "status=$?")
+    baseline_hooks=$(env -u GIT_CONFIG_GLOBAL -u GIT_CONFIG_SYSTEM -u GIT_CONFIG -u GIT_CONFIG_NOSYSTEM "$GIT_BIN" "${repo_args[@]}" config --get-all core.hooksPath 2>/dev/null; echo "status=$?")
+    if [ "$effective_hooks" != "$baseline_hooks" ]; then
+        refuse_if_ai "changing core.hooksPath through GIT_CONFIG_GLOBAL, GIT_CONFIG_SYSTEM, GIT_CONFIG or GIT_CONFIG_NOSYSTEM"
+    fi
+fi
+
+[ $# -gt 0 ] || exec "$GIT_BIN" "${orig_args[@]}"
+
+alias_depth=0
+alias_refusal=""
+while [ "$1" != "add" ] && [ "$1" != "commit" ]; do
+    alias_expansion=$("$GIT_BIN" "${config_args[@]}" config --get "alias.$1" 2>/dev/null) || break
+    if "$GIT_BIN" --list-cmds=builtins,main,others 2>/dev/null | grep -qxF -- "$1"; then
+        break
+    fi
+    case "$alias_expansion" in
+        '!'*)
+            alias_refusal="the shell alias '$1'"
+            break
+            ;;
+        '')
+            break
+            ;;
+    esac
+    if [ "$alias_depth" -ge 10 ]; then
+        alias_refusal="an alias chain deeper than 10 levels"
+        break
+    fi
+    alias_words=()
+    while IFS= read -r -d '' alias_word; do
+        alias_words+=("$alias_word")
+    done < <(printf '%s\n' "$alias_expansion" | xargs printf '%s\0' 2>/dev/null)
+    if [ ${#alias_words[@]} -eq 0 ] || [ -z "${alias_words[0]}" ]; then
+        alias_refusal="the unparseable alias '$1'"
+        break
+    fi
+    shift
+    set -- "${alias_words[@]}" "$@"
+    alias_depth=$((alias_depth + 1))
+done
+
+if [ -n "$alias_refusal" ]; then
+    refuse_if_ai "$alias_refusal"
+fi
+
 # Function to get the human trailer for commit attribution
 # Maps a vibe-level mode to the appropriate trailer key
 get_human_trailer() {
     local mode="${1:-signoff}"  # "prompt" | "sign-off" | "signoff" | "co-author" | "disapprove"
     local git_name
     local git_email
-    git_name=$("$GIT_BIN" config user.name 2>/dev/null)
-    git_email=$("$GIT_BIN" config user.email 2>/dev/null)
+    git_name=$("$GIT_BIN" "${repo_args[@]}" config user.name 2>/dev/null)
+    git_email=$("$GIT_BIN" "${repo_args[@]}" config user.email 2>/dev/null)
 
     if [ -z "$git_name" ] || [ -z "$git_email" ]; then
         git_name="Unknown User"
@@ -610,12 +762,12 @@ get_human_trailer() {
 
 # Check if the repository requires vibe-level disclosure
 is_vibe_level_required() {
-    "$GIT_BIN" config --get ai-aligned.disclose-vibe-level 2>/dev/null | grep -qi 'true'
+    "$GIT_BIN" "${repo_args[@]}" config --get ai-aligned.disclose-vibe-level 2>/dev/null | grep -qi 'true'
 }
 
 # Check if the repository requires prompt disclosure
 is_prompt_required() {
-    "$GIT_BIN" config --get ai-aligned.require-prompt 2>/dev/null | grep -qi 'true'
+    "$GIT_BIN" "${repo_args[@]}" config --get ai-aligned.require-prompt 2>/dev/null | grep -qi 'true'
 }
 
 # Function to show files that would be added
@@ -626,7 +778,7 @@ show_files_to_add() {
 
     if [ "$add_type" = "all" ]; then
         # Show all modified, new, and deleted files (equivalent to git add -A)
-        "$GIT_BIN" status --porcelain 2>/dev/null | while IFS= read -r line; do
+        "$GIT_BIN" "${repo_args[@]}" status --porcelain 2>/dev/null | while IFS= read -r line; do
             if [ -n "$line" ]; then
                 # Extract filename (everything after the status codes)
                 filename=$(echo "$line" | cut -c4-)
@@ -635,7 +787,7 @@ show_files_to_add() {
         done
     else
         # Show files in current directory and subdirectories (equivalent to git add .)
-        "$GIT_BIN" status --porcelain . 2>/dev/null | while IFS= read -r line; do
+        "$GIT_BIN" "${repo_args[@]}" status --porcelain . 2>/dev/null | while IFS= read -r line; do
             if [ -n "$line" ]; then
                 # Extract filename (everything after the status codes)
                 filename=$(echo "$line" | cut -c4-)
@@ -649,14 +801,14 @@ show_files_to_add() {
 
     # Show the command to add them individually
     if [ "$add_type" = "all" ]; then
-        "$GIT_BIN" status --porcelain 2>/dev/null | while IFS= read -r line; do
+        "$GIT_BIN" "${repo_args[@]}" status --porcelain 2>/dev/null | while IFS= read -r line; do
             if [ -n "$line" ]; then
                 filename=$(echo "$line" | cut -c4-)
                 echo "  git add $(printf '%q' "$filename")" >&2
             fi
         done
     else
-        "$GIT_BIN" status --porcelain . 2>/dev/null | while IFS= read -r line; do
+        "$GIT_BIN" "${repo_args[@]}" status --porcelain . 2>/dev/null | while IFS= read -r line; do
             if [ -n "$line" ]; then
                 filename=$(echo "$line" | cut -c4-)
                 echo "  git add $(printf '%q' "$filename")" >&2
@@ -714,7 +866,7 @@ if [ "$1" = "add" ]; then
     fi
 
     # If we get here, the add command is safe - pass through to regular git
-    exec "$GIT_BIN" "$@"
+    exec "$GIT_BIN" "${orig_args[@]}"
 fi
 
 # Check if this is a commit command
@@ -841,7 +993,7 @@ if [ "$1" = "commit" ]; then
         fi
     else
         # Unknown AI tool or no attribution info - pass through to regular git
-        exec "$GIT_BIN" "$@"
+        exec "$GIT_BIN" "${orig_args[@]}"
     fi
 
     # If we detected an AI tool, we need to handle the commit specially
@@ -904,19 +1056,19 @@ if [ "$1" = "commit" ]; then
     # If --prompt is set, create an empty commit attributed to the human
     # Uses a temporary index to avoid consuming the staging area
     if [ -n "$prompt_text" ]; then
-        human_name=$("$GIT_BIN" config user.name 2>/dev/null)
-        human_email=$("$GIT_BIN" config user.email 2>/dev/null)
+        human_name=$("$GIT_BIN" "${repo_args[@]}" config user.name 2>/dev/null)
+        human_email=$("$GIT_BIN" "${repo_args[@]}" config user.email 2>/dev/null)
         if [ -z "$human_name" ]; then human_name="Unknown User"; fi
         if [ -z "$human_email" ]; then human_email="unknown@example.com"; fi
 
         # Create empty commit using a temporary index so staged changes are preserved
         tmp_index=$(mktemp -u)  # -u creates name only, no file
         # Copy current HEAD tree into the temp index so the commit is truly empty
-        if ! GIT_INDEX_FILE="$tmp_index" "$GIT_BIN" read-tree HEAD 2>/dev/null; then
+        if ! GIT_INDEX_FILE="$tmp_index" "$GIT_BIN" "${repo_args[@]}" read-tree HEAD 2>/dev/null; then
             echo "Error: Failed to prepare prompt commit (read-tree failed)." >&2
             exit 1
         fi
-        if ! GIT_INDEX_FILE="$tmp_index" "$GIT_BIN" commit --allow-empty -m "prompt($ai_tool): $prompt_text" --author="$human_name <$human_email>"; then
+        if ! GIT_INDEX_FILE="$tmp_index" "$GIT_BIN" "${repo_args[@]}" commit --allow-empty -m "prompt($ai_tool): $prompt_text" --author="$human_name <$human_email>"; then
             rm -f "$tmp_index"
             echo "Error: Failed to create prompt commit. Aborting." >&2
             exit 1
@@ -933,15 +1085,15 @@ if [ "$1" = "commit" ]; then
         commit_args+=(--template "$tmpfile")
 
         # Run git commit and clean up
-        "$GIT_BIN" "${extra_args[@]}" commit "${commit_args[@]}"
+        "$GIT_BIN" "${global_args[@]}" "${extra_args[@]}" commit "${commit_args[@]}"
         exit_code=$?
         rm -f "$tmpfile"
         exit $exit_code
     else
         # Run git commit with trailer appended
-        exec "$GIT_BIN" "${extra_args[@]}" commit "${commit_args[@]}"
+        exec "$GIT_BIN" "${global_args[@]}" "${extra_args[@]}" commit "${commit_args[@]}"
     fi
 else
     # Not a commit command, pass through to regular git
-    exec "$GIT_BIN" "$@"
+    exec "$GIT_BIN" "${orig_args[@]}"
 fi
