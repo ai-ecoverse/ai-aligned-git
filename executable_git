@@ -575,14 +575,48 @@ find_real_git() {
 # Main script
 GIT_BIN=$(find_real_git)
 
+orig_args=("$@")
+global_args=()
+repo_args=()
+while [ $# -gt 0 ]; do
+    case "$1" in
+        -C|--git-dir|--work-tree)
+            [ $# -ge 2 ] || exec "$GIT_BIN" "${orig_args[@]}"
+            global_args+=("$1" "$2")
+            repo_args+=("$1" "$2")
+            shift 2
+            ;;
+        -c|--namespace|--config-env|--attr-source|--super-prefix)
+            [ $# -ge 2 ] || exec "$GIT_BIN" "${orig_args[@]}"
+            global_args+=("$1" "$2")
+            shift 2
+            ;;
+        --git-dir=*|--work-tree=*|--bare)
+            global_args+=("$1")
+            repo_args+=("$1")
+            shift
+            ;;
+        --namespace=*|--config-env=*|--attr-source=*|--super-prefix=*|--list-cmds=*|--exec-path|--exec-path=*|\
+        --no-pager|-p|-P|--paginate|--literal-pathspecs|--glob-pathspecs|--noglob-pathspecs|\
+        --icase-pathspecs|--no-replace-objects|--no-optional-locks|--no-lazy-fetch|--no-advice)
+            global_args+=("$1")
+            shift
+            ;;
+        *)
+            break
+            ;;
+    esac
+done
+[ $# -gt 0 ] || exec "$GIT_BIN" "${orig_args[@]}"
+
 # Function to get the human trailer for commit attribution
 # Maps a vibe-level mode to the appropriate trailer key
 get_human_trailer() {
     local mode="${1:-signoff}"  # "prompt" | "sign-off" | "signoff" | "co-author" | "disapprove"
     local git_name
     local git_email
-    git_name=$("$GIT_BIN" config user.name 2>/dev/null)
-    git_email=$("$GIT_BIN" config user.email 2>/dev/null)
+    git_name=$("$GIT_BIN" "${repo_args[@]}" config user.name 2>/dev/null)
+    git_email=$("$GIT_BIN" "${repo_args[@]}" config user.email 2>/dev/null)
 
     if [ -z "$git_name" ] || [ -z "$git_email" ]; then
         git_name="Unknown User"
@@ -610,12 +644,12 @@ get_human_trailer() {
 
 # Check if the repository requires vibe-level disclosure
 is_vibe_level_required() {
-    "$GIT_BIN" config --get ai-aligned.disclose-vibe-level 2>/dev/null | grep -qi 'true'
+    "$GIT_BIN" "${repo_args[@]}" config --get ai-aligned.disclose-vibe-level 2>/dev/null | grep -qi 'true'
 }
 
 # Check if the repository requires prompt disclosure
 is_prompt_required() {
-    "$GIT_BIN" config --get ai-aligned.require-prompt 2>/dev/null | grep -qi 'true'
+    "$GIT_BIN" "${repo_args[@]}" config --get ai-aligned.require-prompt 2>/dev/null | grep -qi 'true'
 }
 
 # Function to show files that would be added
@@ -626,7 +660,7 @@ show_files_to_add() {
 
     if [ "$add_type" = "all" ]; then
         # Show all modified, new, and deleted files (equivalent to git add -A)
-        "$GIT_BIN" status --porcelain 2>/dev/null | while IFS= read -r line; do
+        "$GIT_BIN" "${repo_args[@]}" status --porcelain 2>/dev/null | while IFS= read -r line; do
             if [ -n "$line" ]; then
                 # Extract filename (everything after the status codes)
                 filename=$(echo "$line" | cut -c4-)
@@ -635,7 +669,7 @@ show_files_to_add() {
         done
     else
         # Show files in current directory and subdirectories (equivalent to git add .)
-        "$GIT_BIN" status --porcelain . 2>/dev/null | while IFS= read -r line; do
+        "$GIT_BIN" "${repo_args[@]}" status --porcelain . 2>/dev/null | while IFS= read -r line; do
             if [ -n "$line" ]; then
                 # Extract filename (everything after the status codes)
                 filename=$(echo "$line" | cut -c4-)
@@ -649,14 +683,14 @@ show_files_to_add() {
 
     # Show the command to add them individually
     if [ "$add_type" = "all" ]; then
-        "$GIT_BIN" status --porcelain 2>/dev/null | while IFS= read -r line; do
+        "$GIT_BIN" "${repo_args[@]}" status --porcelain 2>/dev/null | while IFS= read -r line; do
             if [ -n "$line" ]; then
                 filename=$(echo "$line" | cut -c4-)
                 echo "  git add $(printf '%q' "$filename")" >&2
             fi
         done
     else
-        "$GIT_BIN" status --porcelain . 2>/dev/null | while IFS= read -r line; do
+        "$GIT_BIN" "${repo_args[@]}" status --porcelain . 2>/dev/null | while IFS= read -r line; do
             if [ -n "$line" ]; then
                 filename=$(echo "$line" | cut -c4-)
                 echo "  git add $(printf '%q' "$filename")" >&2
@@ -714,7 +748,7 @@ if [ "$1" = "add" ]; then
     fi
 
     # If we get here, the add command is safe - pass through to regular git
-    exec "$GIT_BIN" "$@"
+    exec "$GIT_BIN" "${orig_args[@]}"
 fi
 
 # Check if this is a commit command
@@ -841,7 +875,7 @@ if [ "$1" = "commit" ]; then
         fi
     else
         # Unknown AI tool or no attribution info - pass through to regular git
-        exec "$GIT_BIN" "$@"
+        exec "$GIT_BIN" "${orig_args[@]}"
     fi
 
     # If we detected an AI tool, we need to handle the commit specially
@@ -904,19 +938,19 @@ if [ "$1" = "commit" ]; then
     # If --prompt is set, create an empty commit attributed to the human
     # Uses a temporary index to avoid consuming the staging area
     if [ -n "$prompt_text" ]; then
-        human_name=$("$GIT_BIN" config user.name 2>/dev/null)
-        human_email=$("$GIT_BIN" config user.email 2>/dev/null)
+        human_name=$("$GIT_BIN" "${repo_args[@]}" config user.name 2>/dev/null)
+        human_email=$("$GIT_BIN" "${repo_args[@]}" config user.email 2>/dev/null)
         if [ -z "$human_name" ]; then human_name="Unknown User"; fi
         if [ -z "$human_email" ]; then human_email="unknown@example.com"; fi
 
         # Create empty commit using a temporary index so staged changes are preserved
         tmp_index=$(mktemp -u)  # -u creates name only, no file
         # Copy current HEAD tree into the temp index so the commit is truly empty
-        if ! GIT_INDEX_FILE="$tmp_index" "$GIT_BIN" read-tree HEAD 2>/dev/null; then
+        if ! GIT_INDEX_FILE="$tmp_index" "$GIT_BIN" "${repo_args[@]}" read-tree HEAD 2>/dev/null; then
             echo "Error: Failed to prepare prompt commit (read-tree failed)." >&2
             exit 1
         fi
-        if ! GIT_INDEX_FILE="$tmp_index" "$GIT_BIN" commit --allow-empty -m "prompt($ai_tool): $prompt_text" --author="$human_name <$human_email>"; then
+        if ! GIT_INDEX_FILE="$tmp_index" "$GIT_BIN" "${repo_args[@]}" commit --allow-empty -m "prompt($ai_tool): $prompt_text" --author="$human_name <$human_email>"; then
             rm -f "$tmp_index"
             echo "Error: Failed to create prompt commit. Aborting." >&2
             exit 1
@@ -933,15 +967,15 @@ if [ "$1" = "commit" ]; then
         commit_args+=(--template "$tmpfile")
 
         # Run git commit and clean up
-        "$GIT_BIN" "${extra_args[@]}" commit "${commit_args[@]}"
+        "$GIT_BIN" "${global_args[@]}" "${extra_args[@]}" commit "${commit_args[@]}"
         exit_code=$?
         rm -f "$tmpfile"
         exit $exit_code
     else
         # Run git commit with trailer appended
-        exec "$GIT_BIN" "${extra_args[@]}" commit "${commit_args[@]}"
+        exec "$GIT_BIN" "${global_args[@]}" "${extra_args[@]}" commit "${commit_args[@]}"
     fi
 else
     # Not a commit command, pass through to regular git
-    exec "$GIT_BIN" "$@"
+    exec "$GIT_BIN" "${orig_args[@]}"
 fi
