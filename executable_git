@@ -575,9 +575,19 @@ find_real_git() {
 # Main script
 GIT_BIN=$(find_real_git)
 
+is_blocked_config_key() {
+    local key
+    key=$(printf '%s' "${1%%=*}" | tr '[:upper:]' '[:lower:]')
+    case "$key" in
+        core.hookspath|alias.*) return 0 ;;
+    esac
+    return 1
+}
+
 orig_args=("$@")
 global_args=()
 repo_args=()
+blocked_config=()
 while [ $# -gt 0 ]; do
     case "$1" in
         -C|--git-dir|--work-tree)
@@ -586,7 +596,22 @@ while [ $# -gt 0 ]; do
             repo_args+=("$1" "$2")
             shift 2
             ;;
-        -c|--namespace|--config-env|--attr-source|--super-prefix)
+        -c|--config-env)
+            [ $# -ge 2 ] || exec "$GIT_BIN" "${orig_args[@]}"
+            if is_blocked_config_key "$2"; then
+                blocked_config+=("$1 $2")
+            fi
+            global_args+=("$1" "$2")
+            shift 2
+            ;;
+        --config-env=*)
+            if is_blocked_config_key "${1#--config-env=}"; then
+                blocked_config+=("$1")
+            fi
+            global_args+=("$1")
+            shift
+            ;;
+        --namespace|--attr-source|--super-prefix)
             [ $# -ge 2 ] || exec "$GIT_BIN" "${orig_args[@]}"
             global_args+=("$1" "$2")
             shift 2
@@ -596,7 +621,7 @@ while [ $# -gt 0 ]; do
             repo_args+=("$1")
             shift
             ;;
-        --namespace=*|--config-env=*|--attr-source=*|--super-prefix=*|--list-cmds=*|--exec-path|--exec-path=*|\
+        --namespace=*|--attr-source=*|--super-prefix=*|--list-cmds=*|--exec-path|--exec-path=*|\
         --no-pager|-p|-P|--paginate|--literal-pathspecs|--glob-pathspecs|--noglob-pathspecs|\
         --icase-pathspecs|--no-replace-objects|--no-optional-locks|--no-lazy-fetch|--no-advice)
             global_args+=("$1")
@@ -607,7 +632,56 @@ while [ $# -gt 0 ]; do
             ;;
     esac
 done
+
+if [[ "$GIT_CONFIG_COUNT" =~ ^[0-9]+$ ]]; then
+    config_index=0
+    while [ "$config_index" -lt "$GIT_CONFIG_COUNT" ]; do
+        config_key_var="GIT_CONFIG_KEY_$config_index"
+        if is_blocked_config_key "${!config_key_var}"; then
+            blocked_config+=("$config_key_var=${!config_key_var}")
+        fi
+        config_index=$((config_index + 1))
+    done
+fi
+config_parameters_lower=$(printf '%s' "$GIT_CONFIG_PARAMETERS" | tr '[:upper:]' '[:lower:]')
+if [[ "$config_parameters_lower" == *"'core.hookspath'"* ]] || [[ "$config_parameters_lower" == *"'alias."* ]]; then
+    blocked_config+=("GIT_CONFIG_PARAMETERS")
+fi
+
+if [ ${#blocked_config[@]} -gt 0 ]; then
+    ai_tool=$(detect_ai_tool)
+    if [ "$ai_tool" != "none" ]; then
+        echo "Error: overriding core.hooksPath or alias.* from the command line or environment is not allowed when running under AI control ($ai_tool)." >&2
+        echo "Offending setting(s):" >&2
+        for blocked in "${blocked_config[@]}"; do
+            echo "  $blocked" >&2
+        done
+        echo "Run the hooks and use the real git subcommand directly instead." >&2
+        exit 1
+    fi
+fi
+
 [ $# -gt 0 ] || exec "$GIT_BIN" "${orig_args[@]}"
+
+alias_depth=0
+while [ "$1" != "add" ] && [ "$1" != "commit" ] && [ "$alias_depth" -lt 10 ]; do
+    alias_expansion=$("$GIT_BIN" "${repo_args[@]}" config --get "alias.$1" 2>/dev/null) || break
+    case "$alias_expansion" in
+        '!'*|'') break ;;
+    esac
+    if "$GIT_BIN" --list-cmds=builtins,main,others 2>/dev/null | grep -qxF -- "$1"; then
+        break
+    fi
+    alias_words=()
+    while IFS= read -r -d '' alias_word; do
+        alias_words+=("$alias_word")
+    done < <(printf '%s\n' "$alias_expansion" | xargs printf '%s\0' 2>/dev/null)
+    [ ${#alias_words[@]} -gt 0 ] || break
+    [ -n "${alias_words[0]}" ] || break
+    shift
+    set -- "${alias_words[@]}" "$@"
+    alias_depth=$((alias_depth + 1))
+done
 
 # Function to get the human trailer for commit attribution
 # Maps a vibe-level mode to the appropriate trailer key
