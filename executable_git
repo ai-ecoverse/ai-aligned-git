@@ -94,7 +94,7 @@ ami_check_env() {
     fi
 
     # Aider detection
-    if [ "$OR_APP_NAME" = "Aider" ] || [ -n "$AIDER_CLI" ]; then
+    if [ "$OR_APP_NAME" = "Aider" ]; then
         detected="$detected aider"
         _ami_debug "Detected Aider via environment variable"
     fi
@@ -187,7 +187,7 @@ ami_check_env() {
     fi
 
     # Windsurf/Cascade detection
-    if [ -n "$WINDSURF_SESSION" ] || [ -n "$WINDSURF_AI" ] || [ "$TERM_PROGRAM" = "windsurf" ]; then
+    if [ -n "$WINDSURF_SESSION" ] || [ "$TERM_PROGRAM" = "windsurf" ]; then
         detected="$detected windsurf"
         _ami_debug "Detected Windsurf via environment variable"
     fi
@@ -196,157 +196,112 @@ ami_check_env() {
 }
 ami_check_ps_tree() {
     local detected=""
-    local current_pid=$$
     local max_depth=10
     local depth=0
 
-    _ami_debug "Starting process tree detection from PID $current_pid"
+    _ami_debug "Starting process tree detection from PID $$"
 
-    while [ $depth -lt $max_depth ]; do
-        # Get parent PID
-        if [[ "$OSTYPE" == "darwin"* ]]; then
-            current_pid=$(ps -p "$current_pid" -o ppid= 2>/dev/null | tr -d ' ')
-        else
-            current_pid=$(ps -p "$current_pid" -o ppid= 2>/dev/null | tr -d ' ')
+    # Ancestor chain (parent first, up to max_depth, stopping at PID 0/1),
+    # computed from a single snapshot of the process table.
+    local chain
+    chain=$(ps -A -o pid=,ppid= 2>/dev/null | awk -v pid="$$" -v max="$max_depth" '
+        { parent[$1] = $2 }
+        END {
+            out = ""
+            for (d = 0; d < max && (pid in parent); d++) {
+                pid = parent[pid]
+                if (pid == "" || pid + 0 <= 1) break
+                out = out (out == "" ? "" : ",") pid
+            }
+            print out
+        }')
+
+    if [ -z "$chain" ]; then
+        _ami_debug "Reached top of process tree at depth 0"
+        echo ""
+        return 0
+    fi
+
+    # One lowercased snapshot of comm and command for every ancestor.
+    local cmd_field="command"
+    [[ "$OSTYPE" == "darwin"* ]] || cmd_field="cmd"
+    local snapshot
+    snapshot=$( { ps -p "$chain" -o pid=,comm=; echo "--"; ps -p "$chain" -o "pid=,${cmd_field}="; } 2>/dev/null \
+        | tr '[:upper:]' '[:lower:]')
+
+    local -a comm_of cmd_of
+    local section=comm line spid rest
+    while IFS= read -r line; do
+        if [ "$line" = "--" ]; then
+            section=cmd
+            continue
         fi
+        read -r spid rest <<< "$line"
+        case "$spid" in ''|*[!0-9]*) continue ;; esac
+        if [ "$section" = comm ]; then comm_of[spid]=$rest; else cmd_of[spid]=$rest; fi
+    done <<< "$snapshot"
 
-        # Check if we've reached the top
-        if [ -z "$current_pid" ] || [ "$current_pid" -eq 1 ] || [ "$current_pid" -eq 0 ]; then
+    local current_pid c a pattern tool words
+    for current_pid in ${chain//,/ }; do
+        # A process that exited between the two ps calls ends the walk,
+        # just like a failed `ps -p` did before.
+        if [ -z "${comm_of[current_pid]+x}" ] && [ -z "${cmd_of[current_pid]+x}" ]; then
             _ami_debug "Reached top of process tree at depth $depth"
             break
         fi
 
         _ami_debug "Checking PID $current_pid at depth $depth"
+        c=${comm_of[current_pid]}
+        a=${cmd_of[current_pid]}
+        words=""
 
-        # Check for AI tool patterns
-        if ami_process_contains "$current_pid" "claude"; then
-            detected="$detected claude"
-            _ami_debug "Detected Claude in process tree at depth $depth"
-        fi
-        if ami_process_contains "$current_pid" "gemini"; then
-            detected="$detected gemini"
-            _ami_debug "Detected Gemini in process tree at depth $depth"
-        fi
-        # Detect Codex CLI/Desktop by process name
-        if ami_process_contains "$current_pid" "codex"; then
-            detected="$detected codex"
-            _ami_debug "Detected Codex in process tree at depth $depth"
-        fi
-        if ami_process_contains "$current_pid" "aider"; then
-            detected="$detected aider"
-            _ami_debug "Detected Aider in process tree at depth $depth"
-        fi
-        if ami_process_contains "$current_pid" "qwen"; then
-            detected="$detected qwen"
-            _ami_debug "Detected Qwen in process tree at depth $depth"
-        fi
-        if ami_process_contains "$current_pid" "zed"; then
-            # Attribute to Zed's native agent when terminal vars ARE set and SHLVL > 1
-            # BUT not if parent is an interactive shell (human typing)
-            local tp_lower
-            tp_lower=$(echo "$TERM_PROGRAM" | tr '[:upper:]' '[:lower:]')
-            if { [ "$tp_lower" = "zed" ] || [ -n "$ZED_TERM" ]; } && [ "${SHLVL:-1}" -gt 1 ]; then
-                local parent_comm
-                parent_comm=$(ps -p "$PPID" -o comm= 2>/dev/null | tr '[:upper:]' '[:lower:]')
+        # Patterns in the original detection order ("pattern:tool"). Plain entries
+        # are case-insensitive substring matches against comm and command (same as
+        # ami_process_contains); cursor-agent avoids Cursor IDE terminals.
+        for pattern in claude:claude gemini:gemini codex:codex aider:aider qwen:qwen \
+                       zed:zed opencode:opencode cursor-agent:cursor kimi:kimi \
+                       crush:crush goose:goose grok:grok pi:pi auggie:auggie \
+                       cline:cline roo:roo windsurf:windsurf droid:droid; do
+            tool=${pattern#*:}
+            pattern=${pattern%%:*}
+            case "$tool" in
+                pi)
+                    # Space-bounded token match on " comm command ": catches the
+                    # launched `pi` binary (@earendil-works/pi-coding-agent) without
+                    # false positives on pip/mpi/picocom/etc.
+                    [[ " $c $a " == *" pi "* || " $c $a " == *" pi-coding-agent "* ]] || continue
+                    ;;
+                roo|droid)
+                    # Whole-word match (like grep -w): avoids "kangaroo" for Roo Code
+                    # and "android-studio" for Droid.
+                    [ -n "$words" ] || words=" ${c//[![:alnum:]_]/ } ${a//[![:alnum:]_]/ } "
+                    [[ "$words" == *" $pattern "* ]] || continue
+                    ;;
+                *)
+                    [[ "$c" == *"$pattern"* || "$a" == *"$pattern"* ]] || continue
+                    ;;
+            esac
+            if [ "$tool" = zed ]; then
+                # Attribute to Zed's native agent when terminal vars ARE set and SHLVL > 1
+                # BUT not if parent is an interactive shell (human typing)
+                local tp_lower parent_comm
+                tp_lower=$(echo "$TERM_PROGRAM" | tr '[:upper:]' '[:lower:]')
+                { { [ "$tp_lower" = "zed" ] || [ -n "$ZED_TERM" ]; } && [ "${SHLVL:-1}" -gt 1 ]; } || continue
+                if [ -n "${comm_of[PPID]+x}" ]; then
+                    parent_comm=${comm_of[PPID]}
+                else
+                    parent_comm=$(ps -p "$PPID" -o comm= 2>/dev/null | tr '[:upper:]' '[:lower:]')
+                fi
                 case "$parent_comm" in
                     bash|elvish|zsh|fish|ksh|tcsh|dash|-bash|-elvish|-zsh|-fish|-ksh|-tcsh|-dash)
-                        # Parent is interactive shell - human typing
                         _ami_debug "Zed in tree but parent is interactive shell - human typing"
-                        ;;
-                    *)
-                        detected="$detected zed"
-                        _ami_debug "Detected Zed AI in process tree at depth $depth"
+                        continue
                         ;;
                 esac
             fi
-        fi
-        if ami_process_contains "$current_pid" "opencode"; then
-            detected="$detected opencode"
-            _ami_debug "Detected OpenCode in process tree at depth $depth"
-        fi
-        # Cursor detection - use cursor-agent to avoid false positives in Cursor IDE terminals
-        if ami_process_contains "$current_pid" "cursor-agent"; then
-            detected="$detected cursor"
-            _ami_debug "Detected Cursor in process tree at depth $depth"
-        fi
-        # Kimi CLI detection - look for kimi in process command
-        if ami_process_contains "$current_pid" "kimi"; then
-            detected="$detected kimi"
-            _ami_debug "Detected Kimi CLI in process tree at depth $depth"
-        fi
-        # Crush detection - look for crush in process command
-        if ami_process_contains "$current_pid" "crush"; then
-            detected="$detected crush"
-            _ami_debug "Detected Crush in process tree at depth $depth"
-        fi
-        # Goose detection - look for goose in process command
-        if ami_process_contains "$current_pid" "goose"; then
-            detected="$detected goose"
-            _ami_debug "Detected Goose in process tree at depth $depth"
-        fi
-        # Grok Build detection - look for grok in process command (binary is grok or grok-macos-*)
-        if ami_process_contains "$current_pid" "grok"; then
-            detected="$detected grok"
-            _ami_debug "Detected Grok Build in process tree at depth $depth"
-        fi
-        # Pi Coding Agent detection (package @earendil-works/pi-coding-agent, https://pi.dev)
-        # Safe whole-token match: pad both sides of ps output with spaces, then test for the
-        # space-bounded token " pi " (or " pi-coding-agent" path fragment). Simplest approach,
-        # no regex. Catches the launched `pi` binary (shows as COMM/COMMAND="pi") without
-        # false positives on pip/mpi/picocom/etc. Env var PI_CODING_AGENT is still primary.
-        local pi_out
-        if [[ "$OSTYPE" == "darwin"* ]]; then
-            pi_out="$(ps -p "$current_pid" -o comm= 2>/dev/null) $(ps -p "$current_pid" -o command= 2>/dev/null)"
-        else
-            pi_out="$(ps -p "$current_pid" -o comm= 2>/dev/null) $(ps -p "$current_pid" -o cmd= 2>/dev/null)"
-        fi
-        if echo " $pi_out " | grep -qi " pi " || echo " $pi_out " | grep -qi " pi-coding-agent "; then
-            detected="$detected pi"
-            _ami_debug "Detected Pi in process tree at depth $depth (space-bounded token)"
-        fi
-        # Auggie detection - look for auggie in process command
-        if ami_process_contains "$current_pid" "auggie"; then
-            detected="$detected auggie"
-            _ami_debug "Detected Auggie in process tree at depth $depth"
-        fi
-        # Cline detection
-        if ami_process_contains "$current_pid" "cline"; then
-            detected="$detected cline"
-            _ami_debug "Detected Cline in process tree at depth $depth"
-        fi
-        # Roo Code detection - use word boundary to avoid matching "kangaroo", etc.
-        if [[ "$OSTYPE" == "darwin"* ]]; then
-            if ps -p "$current_pid" -o comm= 2>/dev/null | grep -qiw "roo" || \
-               ps -p "$current_pid" -o command= 2>/dev/null | grep -qiw "roo"; then
-                detected="$detected roo"
-                _ami_debug "Detected Roo Code in process tree at depth $depth"
-            fi
-        else
-            if ps -p "$current_pid" -o comm= 2>/dev/null | grep -qiw "roo" || \
-               ps -p "$current_pid" -o cmd= 2>/dev/null | grep -qiw "roo"; then
-                detected="$detected roo"
-                _ami_debug "Detected Roo Code in process tree at depth $depth"
-            fi
-        fi
-        # Windsurf detection
-        if ami_process_contains "$current_pid" "windsurf"; then
-            detected="$detected windsurf"
-            _ami_debug "Detected Windsurf in process tree at depth $depth"
-        fi
-        # Droid detection - use word boundary to avoid matching android-studio, etc.
-        if [[ "$OSTYPE" == "darwin"* ]]; then
-            if ps -p "$current_pid" -o comm= 2>/dev/null | grep -qiw "droid" || \
-               ps -p "$current_pid" -o command= 2>/dev/null | grep -qiw "droid"; then
-                detected="$detected droid"
-                _ami_debug "Detected Droid in process tree at depth $depth"
-            fi
-        else
-            if ps -p "$current_pid" -o comm= 2>/dev/null | grep -qiw "droid" || \
-               ps -p "$current_pid" -o cmd= 2>/dev/null | grep -qiw "droid"; then
-                detected="$detected droid"
-                _ami_debug "Detected Droid in process tree at depth $depth"
-            fi
-        fi
+            detected="$detected $tool"
+            _ami_debug "Detected $tool in process tree at depth $depth"
+        done
 
         depth=$((depth + 1))
     done
