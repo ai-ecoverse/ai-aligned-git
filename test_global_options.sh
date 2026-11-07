@@ -466,6 +466,35 @@ else
 fi
 cleanup_repo "$repo"
 
+repo=$(setup_repo)
+cd "$repo" || exit 1
+output=$(CLAUDECODE=1 "$GIT_WRAPPER" -c core.fsmonitor= -c core.hooksPath=/dev/null status --porcelain 2>&1)
+status=$?
+if [ $status -eq 0 ] && [[ "$output" != *"not allowed"* ]]; then
+    pass "AI read-only status with -c core.hooksPath skips the guard"
+else
+    fail "AI read-only status with -c core.hooksPath skips the guard" "status=$status output='$output'"
+fi
+output=$(CLAUDECODE=1 "$GIT_WRAPPER" -c core.hooksPath=/dev/null for-each-ref --format='%(refname)' 2>&1)
+status=$?
+if [ $status -eq 0 ] && [[ "$output" == *"refs/heads/"* ]]; then
+    pass "AI read-only for-each-ref with -c core.hooksPath skips the guard"
+else
+    fail "AI read-only for-each-ref with -c core.hooksPath skips the guard" "status=$status output='$output'"
+fi
+echo change > file2.txt
+git add file2.txt
+before=$(git rev-list --count HEAD)
+output=$(CLAUDECODE=1 "$GIT_WRAPPER" -c core.hooksPath=/dev/null commit -m "bypass" 2>&1)
+status=$?
+after=$(git rev-list --count HEAD)
+if [ $status -ne 0 ] && [ "$before" = "$after" ]; then
+    pass "AI commit with -c core.hooksPath is still refused"
+else
+    fail "AI commit with -c core.hooksPath is still refused" "status=$status before=$before after=$after output='$output'"
+fi
+cleanup_repo "$repo"
+
 echo ""
 echo "=== Results ==="
 echo "Passed: $PASS_COUNT"

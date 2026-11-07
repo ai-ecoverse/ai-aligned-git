@@ -615,6 +615,21 @@ while [ $# -gt 0 ]; do
     esac
 done
 
+# Fast path: read-only builtins never run hooks and cannot be shadowed by
+# aliases, so they skip AI detection and the config guards entirely. Editors,
+# agents and IDEs poll these constantly (often with -c core.hooksPath=/dev/null);
+# running the process-tree detection on every poll piled up hundreds of wrapper
+# processes and refused harmless status calls.
+if [ -z "$unknown_option" ]; then
+    case "${1-}" in
+        status|rev-parse|for-each-ref|log|diff|show|ls-files|ls-tree|cat-file|show-ref|\
+        describe|merge-base|name-rev|blame|grep|rev-list|diff-index|diff-files|diff-tree|\
+        check-ignore|check-attr|count-objects|shortlog|var)
+            exec "$GIT_BIN" "${orig_args[@]}"
+            ;;
+    esac
+fi
+
 if [ -n "$unknown_option" ]; then
     refuse_if_ai "the unrecognised global option '$unknown_option' before the subcommand"
 fi
