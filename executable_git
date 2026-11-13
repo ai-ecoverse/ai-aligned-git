@@ -5,7 +5,7 @@
 # See: https://github.com/ai-ecoverse/am-i-ai
 
 # --- BEGIN BUNDLED am-i-ai ---
-# Bundled from am-i-ai v1.5.1
+# Bundled from am-i-ai v1.5.2
 # https://github.com/ai-ecoverse/am-i-ai
 #
 # This code is auto-generated. Do not edit manually.
@@ -450,7 +450,7 @@ ami_get_email() {
         "openhands") echo "openhands@all-hands.dev" ;;
         "crush")    echo "crush@charm.land" ;;
         "goose")    echo "goose@opensource.block.xyz" ;;
-        "grok")     echo "grok@x.ai" ;;
+        "grok")     echo "noreply@x.ai" ;;
         "pi")       echo "pi@earendil.works" ;;
         "auggie")   echo "noreply@augmentcode.com" ;;
         "cline")    echo "cline@cline.bot" ;;
