@@ -450,7 +450,7 @@ ami_get_email() {
         "openhands") echo "openhands@all-hands.dev" ;;
         "crush")    echo "crush@charm.land" ;;
         "goose")    echo "goose@opensource.block.xyz" ;;
-        "grok")     echo "grok@x.ai" ;;
+        "grok")     echo "noreply@x.ai" ;;
         "pi")       echo "pi@earendil.works" ;;
         "auggie")   echo "noreply@augmentcode.com" ;;
         "cline")    echo "cline@cline.bot" ;;
